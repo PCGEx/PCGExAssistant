@@ -1,0 +1,3 @@
+[submodule "Knowledge"]
+	path = Knowledge
+	url = https://github.com/PCGEx/PCGExKnowledge.git

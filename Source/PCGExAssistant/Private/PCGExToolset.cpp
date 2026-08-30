@@ -10,8 +10,15 @@
 
 namespace PCGExAssistant
 {
-	// The offline knowledge bundle (rendered from the documentation card store)
-	// ships inside the plugin, so the data always matches the installed version.
+	// The offline knowledge bundle (rendered from the documentation card store) is the
+	// PCGExKnowledge submodule pinned under Knowledge/, so data matches the installed
+	// versions. Layout: manifest.json (bundle + plugin versions), search.json (flat
+	// search surface, the only file SearchKnowledge loads), concepts.json, and one
+	// per-plugin file of full node entries loaded lazily by GetNode, resolved through
+	// a single nodes-then-aliases lookup (inherits/see/alias ids all resolve there,
+	// cross-file included). The per-plugin file set comes from manifest.plugins[].file,
+	// never a hardcoded list: it grows and shrinks per render (a plugin whose only
+	// cards are parked produces no file).
 	FString GetKnowledgeDir()
 	{
 		const TSharedPtr<IPlugin> Plugin = IPluginManager::Get().FindPlugin(TEXT("PCGExAssistant"));
@@ -27,16 +34,17 @@ namespace PCGExAssistant
 	}
 }
 
-FString UPCGExToolset::SearchNodes(const FString& Query, const int32 MaxResults)
+FString UPCGExToolset::SearchKnowledge(const FString& Query, const int32 MaxResults)
 {
-	// Phase 1 scaffold: served from the Knowledge/ bundle once render-bundle lands.
-	UKismetSystemLibrary::RaiseScriptError(TEXT("SearchNodes is not implemented yet: the PCGEx knowledge bundle has not shipped with this build."));
+	// Phase 1 scaffold: serves Knowledge/search.json once render-bundle lands.
+	UKismetSystemLibrary::RaiseScriptError(TEXT("SearchKnowledge is not implemented yet: the PCGEx knowledge bundle has not shipped with this build."));
 	return FString();
 }
 
 FString UPCGExToolset::GetNode(const FString& NodeId)
 {
-	// Phase 1 scaffold: served from the Knowledge/ bundle once render-bundle lands.
+	// Phase 1 scaffold: resolves NodeId (or an alias) against the owning plugin's
+	// Knowledge/<Plugin>.json once render-bundle lands.
 	UKismetSystemLibrary::RaiseScriptError(TEXT("GetNode is not implemented yet: the PCGEx knowledge bundle has not shipped with this build."));
 	return FString();
 }

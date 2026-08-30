@@ -27,25 +27,27 @@ class PCGEXASSISTANT_API UPCGExToolset : public UToolsetDefinition
 	GENERATED_BODY()
 
 public:
-	// ~ Phase 1 : Knowledge (offline card bundle shipped under Knowledge/)
+	// ~ Phase 1 : Knowledge (offline bundle: the PCGExKnowledge submodule under Knowledge/)
 
 	/**
-	 * Search the PCGEx node knowledge base. Matches against node display names,
-	 * purpose statements and canonical situations across every installed PCGEx plugin.
-	 * Call this first when unsure which PCGEx node fits a task, then fetch details with GetNode.
+	 * Search the PCGEx knowledge base: every node and concept page across the installed
+	 * PCGEx plugins, matched against display names, purpose statements and canonical
+	 * situations. Call this first when unsure which PCGEx node or system fits a task.
+	 * Results of kind "node" have full detail available via GetNode; results of kind
+	 * "concept" answer how-does-this-system-work questions and carry a documentation url.
 	 * @param Query Free-text description of the operation or problem, e.g. "collapse overlapping points" or "find shortest path on a cluster".
 	 * @param MaxResults Maximum number of matches to return.
-	 * @return JSON array of matches: { id, name, purpose } ordered by relevance.
+	 * @return JSON array of matches ordered by relevance: { id, name, plugin, kind: "node"|"concept", purpose, situation, url? }.
 	 */
 	UFUNCTION(meta = (AICallable), Category = "PCGEx|Knowledge")
-	static FString SearchNodes(const FString& Query, const int32 MaxResults = 10);
+	static FString SearchKnowledge(const FString& Query, const int32 MaxResults = 10);
 
 	/**
-	 * Fetch the full knowledge card for one PCGEx node: what it is for, its mechanism,
+	 * Fetch the full knowledge entry for one PCGEx node: what it is for, its mechanism,
 	 * exact pin contract (including conditional pins), settings semantics with traps and
-	 * interactions, and related nodes.
-	 * @param NodeId A node id returned by SearchNodes.
-	 * @return JSON object with the complete card, or an error if the id is unknown.
+	 * interactions, and related nodes and concepts.
+	 * @param NodeId The node's C++ settings class name (e.g. UPCGExBevelPathSettings), as returned by SearchKnowledge or seen in live reflection. Variant classes documented on a shared page resolve through aliases; settings surfaces inherited from a shared base are referenced by id and fetched with further GetNode calls.
+	 * @return JSON object with the complete entry, or an error if the id is unknown.
 	 */
 	UFUNCTION(meta = (AICallable), Category = "PCGEx|Knowledge")
 	static FString GetNode(const FString& NodeId);
