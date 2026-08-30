@@ -330,7 +330,8 @@ FString UPCGExToolset::ListRegisteredNodeTypes(const FString& ModuleFilter)
 		if (DisplayName.IsEmpty()) { DisplayName = Class->GetName(); }
 
 		const TSharedPtr<FJsonObject> Entry = MakeShared<FJsonObject>();
-		Entry->SetStringField(TEXT("class"), Class->GetName());
+		// Prefixed C++ name: knowledge-bundle ids are U-prefixed, and this field is the join key.
+		Entry->SetStringField(TEXT("class"), FString::Printf(TEXT("%s%s"), Class->GetPrefixCPP(), *Class->GetName()));
 		Entry->SetStringField(TEXT("displayName"), DisplayName);
 		Entry->SetStringField(TEXT("module"), Module);
 		if (Class->HasAnyClassFlags(CLASS_Hidden))
