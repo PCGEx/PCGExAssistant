@@ -33,11 +33,14 @@ public:
 	 * Search the PCGEx knowledge base: every node and concept page across the installed
 	 * PCGEx plugins, matched against display names, purpose statements and canonical
 	 * situations. Call this first when unsure which PCGEx node or system fits a task.
-	 * Results of kind "node" have full detail available via GetNode; results of kind
-	 * "concept" answer how-does-this-system-work questions and carry a documentation url.
+	 * Results of kind "entry" have full detail available via GetNode, with classification
+	 * telling nodes apart from providers, data assets and shared settings surfaces; results
+	 * of kind "concept" answer how-does-this-system-work questions and carry a documentation url.
+	 * Only classifications "node" and "provider" are placeable in a PCG graph; "blueprint_node"
+	 * entries are Blueprint utility nodes and never belong in a PCG graph.
 	 * @param Query Free-text description of the operation or problem, e.g. "collapse overlapping points" or "find shortest path on a cluster".
 	 * @param MaxResults Maximum number of matches to return.
-	 * @return JSON array of matches ordered by relevance: { id, name, plugin, kind: "node"|"concept", purpose, situation, url? }.
+	 * @return JSON array of matches ordered by relevance: { id, name, plugin, kind: "entry"|"concept", classification?, purpose, situation, url? }.
 	 */
 	UFUNCTION(meta = (AICallable), Category = "PCGEx|Knowledge")
 	static FString SearchKnowledge(const FString& Query, const int32 MaxResults = 10);
@@ -47,7 +50,7 @@ public:
 	 * exact pin contract (including conditional pins), settings semantics with traps and
 	 * interactions, and related nodes and concepts.
 	 * @param NodeId The node's C++ settings class name (e.g. UPCGExBevelPathSettings), as returned by SearchKnowledge or seen in live reflection. Variant classes documented on a shared page resolve through aliases; settings surfaces inherited from a shared base are referenced by id and fetched with further GetNode calls.
-	 * @return JSON object with the complete entry, or an error if the id is unknown.
+	 * @return JSON object with the complete entry, or an error if the id is unknown. The entry's classification governs placeability: only "node" and "provider" go in a PCG graph.
 	 */
 	UFUNCTION(meta = (AICallable), Category = "PCGEx|Knowledge")
 	static FString GetNode(const FString& NodeId);
@@ -68,7 +71,7 @@ public:
 	 * live reflection rather than the knowledge base. Useful to confirm a node exists in
 	 * the installed version before adding it to a graph via the PCG toolset.
 	 * @param ModuleFilter Optional module name substring, e.g. "Valency"; empty lists all.
-	 * @return JSON array of { class, displayName, module }.
+	 * @return JSON array of { class, displayName, module, hidden? } sorted by display name; hidden marks deprecated-but-compatible palette nodes.
 	 */
 	UFUNCTION(meta = (AICallable), Category = "PCGEx|Introspection")
 	static FString ListRegisteredNodeTypes(const FString& ModuleFilter);
