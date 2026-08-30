@@ -1,0 +1,14 @@
+# Editor / IDE
+.vs/
+*.sln
+*.suo
+*.VC.db
+*.VC.opendb
+.vsconfig
+
+# Build outputs
+Binaries/
+Intermediate/
+DerivedDataCache/
+Saved/
+Build/
