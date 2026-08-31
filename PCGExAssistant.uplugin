@@ -38,10 +38,6 @@
       "Enabled": true
     },
     {
-      "Name": "PCGExtendedToolkit",
-      "Enabled": true
-    },
-    {
       "Name": "ToolsetRegistry",
       "Enabled": true
     }
