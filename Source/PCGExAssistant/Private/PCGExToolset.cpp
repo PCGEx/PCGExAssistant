@@ -12,6 +12,7 @@
 #include "PCGSettings.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
+#include "UObject/Package.h"
 #include "UObject/UObjectIterator.h"
 
 namespace PCGExAssistant
