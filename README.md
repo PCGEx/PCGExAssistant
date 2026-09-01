@@ -33,5 +33,3 @@ The knowledge base is rendered from the same verified card store that produces t
 
 - Documentation: https://pcgex.gitbook.io/pcgex/
 - Discord: https://discord.gg/mde2vC5gbE
-
-Released under the MIT license.
