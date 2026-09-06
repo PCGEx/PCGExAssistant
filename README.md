@@ -2,7 +2,7 @@
 
 AI agent integration for the [PCGEx](https://pcgex.gitbook.io/pcgex/) ecosystem. The plugin registers a PCGEx toolset with Unreal's experimental Toolset Registry and ships an offline, source-verified knowledge base covering every documented PCGEx node: purpose, mechanism, exact pin contracts, settings semantics and known traps, matched to the installed plugin versions.
 
-Any MCP client (Claude Code, Cursor, VS Code, and others) connected to the engine's Model Context Protocol server can then search that knowledge base, inspect the installed PCGEx plugins, and ground its answers in what the nodes actually do instead of guessing.
+Any MCP client (Claude Code, Cursor, VS Code, and others) connected to the engine's Model Context Protocol server can then search that knowledge base, inspect the installed PCGEx plugins, place PCGEx nodes in a graph, and ground its answers in what the nodes actually do instead of guessing.
 
 ## Setup
 
@@ -22,8 +22,14 @@ For Claude Code, save this as `.mcp.json` at your project root. With the editor 
 | --- | --- |
 | `SearchKnowledge` | Free-text search across every documented node and concept page of the installed PCGEx plugins. |
 | `GetNode` | The full knowledge entry for one node: purpose, mechanism, pin contract, settings semantics, traps, documentation link. |
+| `GetConcept` | A concept documentation page (clusters, filters, staging, tensors, ...) with its outline, link and, when the bundle carries it, its full prose. |
 | `GetInstalledPCGExPlugins` | Names and versions of the PCGEx-family plugins in the project. |
 | `ListRegisteredNodeTypes` | Live reflection over the node types actually registered in this editor session. |
+| `GetNodeSchema` | The live, writable schema of a node class: pins as the installed version declares them and the JSON shape its params accept, annotated from the knowledge base. |
+| `CreateNode` | Adds a node of any settings class to a PCG graph. The engine's own PCG toolset only knows nodes from the PCG package; this covers PCGEx and everything else. |
+| `AddSubnodes` | Creates a set of provider nodes (filters, heuristics, tensors, samplers) and wires them into a target node in one undoable operation. |
+
+Editing an existing node (params, connections, comments, removal) is left to the engine's PCG toolset, whose tools work on any node once it exists.
 
 ## Knowledge data
 
