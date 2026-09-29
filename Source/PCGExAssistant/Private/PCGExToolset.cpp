@@ -372,7 +372,7 @@ namespace PCGExAssistant
 			{TEXT("tooltip"), TEXT("tooltip")},
 		};
 
-		for (const TPair<FString, TSharedPtr<FJsonValue>>& Pair : (*SchemaProperties)->Values)
+		for (const TPair<UE::TSharedString<char16_t>, TSharedPtr<FJsonValue>>& Pair : (*SchemaProperties)->Values)
 		{
 			const TSharedPtr<FJsonObject>* PropertySchema = nullptr;
 			const TSharedPtr<FJsonObject>* Setting = nullptr;
