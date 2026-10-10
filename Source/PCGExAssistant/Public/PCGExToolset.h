@@ -24,7 +24,8 @@ class UPCGNode;
  * nodes: use CreateNode and AddSubnodes here for those, and the PCG toolset's
  * UpdateNode and ConnectNodePins for everything once a node exists.
  * It also reads and writes PCGEx data as JSON (property schemas, Tuple and Distribute Tuple
- * nodes, asset collections) through ListFormats, DescribeFormat, ExportJson and ImportJson.
+ * nodes, asset collections) through ListFormats, DescribeFormat, ExportJson and ImportJson, creates
+ * and saves PCGEx assets (CreateAsset, SaveAsset) and can undo its last edit (Undo).
  * This is NOT the right toolset for stock PCG questions; use it when node names carry
  * PCGEx category prefixes such as "Cluster :", "Path :", "Vtx :", or when stock PCG
  * lacks the needed operation.
@@ -167,11 +168,13 @@ public:
 	static FString ListFormats();
 
 	/**
-	 * The JSON Schema (draft 2020-12) of a mediator format or of a bound class's object document.
-	 * Read it before writing a document for ImportJson: it is the ground truth for key names, value
-	 * shapes (vectors as arrays, rotators as {pitch, yaw, roll}, enums by name) and the per-type
-	 * value shapes of property schemas ($defs/values).
-	 * @param FormatIdOrClass A format id from ListFormats (e.g. pcgex.property-schema) or a bound class name or path (e.g. UPCGExTupleSettings).
+	 * The JSON Schema (draft 2020-12) of a mediator format, of a bound class's object document, or of
+	 * any struct by path. Read it before writing a document for ImportJson: it is the ground truth for
+	 * key names, value shapes (vectors as arrays, rotators as {pitch, yaw, roll}, enums by name) and
+	 * the per-type value shapes of property schemas ($defs/values). Entry schemas collapse nested
+	 * structs (component descriptors, variations) to a one-line fragment whose $comment names the
+	 * struct path to pass here for the full shape; ask for it only when you need to author those fields.
+	 * @param FormatIdOrClass A format id from ListFormats (e.g. pcgex.property-schema), a bound class name or path (e.g. UPCGExTupleSettings), or a struct path from a collapsed fragment (e.g. /Script/PCG.PCGSoftISMComponentDescriptor).
 	 * @return JSON Schema object, or an error when nothing matches.
 	 */
 	UFUNCTION(meta = (AICallable), Category = "PCGEx|Authoring")
@@ -188,15 +191,50 @@ public:
 	static FString ExportJson(const FString& Target);
 
 	/**
-	 * Import a JSON document into a bound object, undoable. Members present in the document
-	 * replace the host's (a property schema document is the whole schema; an override set is the
-	 * full enabled set); members absent are left alone. Nothing changes unless the whole document
-	 * decodes, and every problem is reported with its path in the document. Read DescribeFormat
-	 * first; ExportJson gives a correct starting document.
+	 * Import a JSON document into a bound object, undoable (one editor transaction; see Undo).
+	 * Members present in the document replace the host's, members absent are left alone. Within a
+	 * member: a property schema document is the whole schema and an override set is the full
+	 * enabled set, while array members (collection entries, Tuple rows) merge BY POSITION: row i
+	 * of the document merges into row i of the host, rows beyond the host's count are created,
+	 * rows the document lacks are removed. Inside an entry an absent key keeps the existing value
+	 * (or the default on a new row), so a partial entry is safe and the sparse ExportJson output
+	 * is the normal starting point. Nothing changes unless the whole document decodes; every
+	 * problem is reported with its path in the document (e.g. data/members/Entries/1/Weight).
 	 * @param Target Object path of the asset, or <graph object path>:<node title or name> for a node.
 	 * @param Json The document, as produced by ExportJson or written to DescribeFormat's schema.
 	 * @return JSON object { ok, diagnostics: [{ severity, path, message }] }; on failure the call also raises an error carrying the diagnostics.
 	 */
 	UFUNCTION(meta = (AICallable), Category = "PCGEx|Authoring")
 	static FString ImportJson(const FString& Target, const FString& Json);
+
+	/**
+	 * Create a PCGEx asset so it can be filled with ImportJson: a Property Schema asset
+	 * (UPCGExPropertySchemaAsset) or any asset collection class (UPCGExMeshCollection,
+	 * UPCGExActorCollection, UPCGExOmniCollection, ...). Any class with an asset factory works. The
+	 * asset is created unsaved and marked dirty; call SaveAsset to write it to disk.
+	 * @param ClassNameOrPath Class name (UPCGExMeshCollection or PCGExMeshCollection) or class path.
+	 * @param PackagePath Long package path of the folder, e.g. /Game/PCGEx/Collections.
+	 * @param AssetName The asset's name, without extension.
+	 * @return JSON object { ok, path, class } with the new asset's object path (the Target for ImportJson); an existing asset, an unknown class or a bad path raises an error.
+	 */
+	UFUNCTION(meta = (AICallable), Category = "PCGEx|Authoring")
+	static FString CreateAsset(const FString& ClassNameOrPath, const FString& PackagePath, const FString& AssetName);
+
+	/**
+	 * Save an asset's package to disk after CreateAsset or ImportJson; nothing written by those is on
+	 * disk until this runs (or the user saves).
+	 * @param Target Object path of the asset.
+	 * @return JSON object { ok, path }; raises an error when the target does not resolve or saving fails.
+	 */
+	UFUNCTION(meta = (AICallable), Category = "PCGEx|Authoring")
+	static FString SaveAsset(const FString& Target);
+
+	/**
+	 * Undo the editor's most recent transaction. An ImportJson is one transaction, so this reverts a
+	 * whole import; it also undoes a user's last manual edit if that came after, so read the returned
+	 * title before relying on it.
+	 * @return JSON object { ok, title } naming the undone transaction; raises an error when there is nothing to undo.
+	 */
+	UFUNCTION(meta = (AICallable), Category = "PCGEx|Authoring")
+	static FString Undo();
 };

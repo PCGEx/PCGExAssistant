@@ -1043,6 +1043,21 @@ FString UPCGExToolset::ImportJson(const FString& Target, const FString& Json)
 	return PCGExAssistant::MediatorBridge::Run(TEXT("ImportJson"), {{FName(TEXT("Target")), Target}, {FName(TEXT("Json")), Json}});
 }
 
+FString UPCGExToolset::CreateAsset(const FString& ClassNameOrPath, const FString& PackagePath, const FString& AssetName)
+{
+	return PCGExAssistant::MediatorBridge::Run(TEXT("CreateAsset"), {{FName(TEXT("ClassNameOrPath")), ClassNameOrPath}, {FName(TEXT("PackagePath")), PackagePath}, {FName(TEXT("AssetName")), AssetName}});
+}
+
+FString UPCGExToolset::SaveAsset(const FString& Target)
+{
+	return PCGExAssistant::MediatorBridge::Run(TEXT("SaveAsset"), {{FName(TEXT("ObjectPath")), Target}});
+}
+
+FString UPCGExToolset::Undo()
+{
+	return PCGExAssistant::MediatorBridge::Run(TEXT("Undo"), {});
+}
+
 #pragma endregion
 
 #undef LOCTEXT_NAMESPACE
