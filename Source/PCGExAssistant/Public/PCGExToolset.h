@@ -23,6 +23,8 @@ class UPCGNode;
  * PCGEx nodes in a PCG graph. The stock PCG toolset cannot create or describe PCGEx
  * nodes: use CreateNode and AddSubnodes here for those, and the PCG toolset's
  * UpdateNode and ConnectNodePins for everything once a node exists.
+ * It also reads and writes PCGEx data as JSON (property schemas, Tuple and Distribute Tuple
+ * nodes, asset collections) through ListFormats, DescribeFormat, ExportJson and ImportJson.
  * This is NOT the right toolset for stock PCG questions; use it when node names carry
  * PCGEx category prefixes such as "Cluster :", "Path :", "Vtx :", or when stock PCG
  * lacks the needed operation.
@@ -149,4 +151,52 @@ public:
 	 */
 	UFUNCTION(meta = (AICallable), Category = "PCGEx|Actuation")
 	static FString AddSubnodes(UPCGGraph* Graph, UPCGNode* TargetNode, const FString& TargetPinLabel, const FString& SubnodesJson);
+
+	// ~ Authoring. PCGEx data as JSON through the PCGExMediator formats: a document is
+	// { "format", "version", "data" }; an object document's data is { "class", "members": { <member>: <body> } }.
+	// Served by PCGExtendedToolkit's UPCGExMediatorLibrary, reached by reflection: this plugin ships alone.
+
+	/**
+	 * List the JSON formats and the object bindings the PCGEx mediator registers in this editor
+	 * session: which structs have a JSON shape (property schemas, override sets, collection
+	 * entries, ...) and which asset or node classes can be exported and imported as a whole,
+	 * with the members that travel. Call this before DescribeFormat when unsure what exists.
+	 * @return JSON object: { formats: [{ id, version, struct, summary }], bindings: [{ class, members, summary }] }.
+	 */
+	UFUNCTION(meta = (AICallable), Category = "PCGEx|Authoring")
+	static FString ListFormats();
+
+	/**
+	 * The JSON Schema (draft 2020-12) of a mediator format or of a bound class's object document.
+	 * Read it before writing a document for ImportJson: it is the ground truth for key names, value
+	 * shapes (vectors as arrays, rotators as {pitch, yaw, roll}, enums by name) and the per-type
+	 * value shapes of property schemas ($defs/values).
+	 * @param FormatIdOrClass A format id from ListFormats (e.g. pcgex.property-schema) or a bound class name or path (e.g. UPCGExTupleSettings).
+	 * @return JSON Schema object, or an error when nothing matches.
+	 */
+	UFUNCTION(meta = (AICallable), Category = "PCGEx|Authoring")
+	static FString DescribeFormat(const FString& FormatIdOrClass);
+
+	/**
+	 * Export a bound object as a JSON document: an asset by object path (a Property Schema asset,
+	 * an asset collection) or a node's settings as "<graph object path>:<node title>" (Tuple,
+	 * Distribute Tuple). The result is what ImportJson accepts back, so edit and re-import it.
+	 * @param Target Object path of the asset, or <graph object path>:<node title or name> for a node.
+	 * @return The JSON document { format, version, data }, or an error with diagnostics when the target does not resolve or has no binding.
+	 */
+	UFUNCTION(meta = (AICallable), Category = "PCGEx|Authoring")
+	static FString ExportJson(const FString& Target);
+
+	/**
+	 * Import a JSON document into a bound object, undoable. Members present in the document
+	 * replace the host's (a property schema document is the whole schema; an override set is the
+	 * full enabled set); members absent are left alone. Nothing changes unless the whole document
+	 * decodes, and every problem is reported with its path in the document. Read DescribeFormat
+	 * first; ExportJson gives a correct starting document.
+	 * @param Target Object path of the asset, or <graph object path>:<node title or name> for a node.
+	 * @param Json The document, as produced by ExportJson or written to DescribeFormat's schema.
+	 * @return JSON object { ok, diagnostics: [{ severity, path, message }] }; on failure the call also raises an error carrying the diagnostics.
+	 */
+	UFUNCTION(meta = (AICallable), Category = "PCGEx|Authoring")
+	static FString ImportJson(const FString& Target, const FString& Json);
 };

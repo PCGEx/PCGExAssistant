@@ -21,6 +21,8 @@
 #include "StructUtils/PropertyBag.h"
 #include "ToolsetRegistry/ToolsetLibrary.h"
 #include "UObject/Package.h"
+#include "UObject/StructOnScope.h"
+#include "UObject/UnrealType.h"
 #include "UObject/UObjectIterator.h"
 
 #define LOCTEXT_NAMESPACE "PCGExToolset"
@@ -923,6 +925,122 @@ FString UPCGExToolset::AddSubnodes(UPCGGraph* Graph, UPCGNode* TargetNode, const
 	Out->SetArrayField(TEXT("nodes"), NodesJson);
 	Out->SetArrayField(TEXT("edges"), EdgesJson);
 	return ToJsonString(Out.ToSharedRef());
+}
+
+#pragma endregion
+
+#pragma region Authoring (PCGExMediator, reached by reflection)
+
+namespace PCGExAssistant::MediatorBridge
+{
+	// PCGExtendedToolkit ships separately; its UPCGExMediatorLibrary is an optional peer reached by name, never
+	// linked. Every parameter and the return value are FStrings, so the call needs no shared header.
+	const TCHAR* const LibraryPath = TEXT("/Script/PCGExMediator.PCGExMediatorLibrary");
+
+	bool Call(const TCHAR* FunctionName, const TMap<FName, FString>& Args, FString& OutResult, FString& OutError)
+	{
+		UClass* Library = FindObject<UClass>(nullptr, LibraryPath);
+		if (!Library)
+		{
+			OutError = TEXT("PCGEx Mediator is not available: this needs PCGExtendedToolkit with its PCGExMediator module enabled.");
+			return false;
+		}
+		UFunction* Function = Library->FindFunctionByName(FunctionName);
+		if (!Function || !Function->HasAnyFunctionFlags(FUNC_Static))
+		{
+			OutError = FString::Printf(TEXT("PCGEx Mediator has no '%s' function; the installed PCGExtendedToolkit is older than this toolset."), FunctionName);
+			return false;
+		}
+
+		FStructOnScope Params(Function);
+		for (TFieldIterator<FProperty> It(Function); It; ++It)
+		{
+			FProperty* Property = *It;
+			if (!Property->HasAnyPropertyFlags(CPF_Parm) || Property->HasAnyPropertyFlags(CPF_ReturnParm)) { continue; }
+			const FStrProperty* StringProperty = CastField<FStrProperty>(Property);
+			const FString* Arg = Args.Find(Property->GetFName());
+			if (!StringProperty || !Arg)
+			{
+				OutError = FString::Printf(TEXT("PCGEx Mediator '%s' has a parameter this toolset does not know (%s)."), FunctionName, *Property->GetName());
+				return false;
+			}
+			StringProperty->SetPropertyValue_InContainer(Params.GetStructMemory(), *Arg);
+		}
+
+		const FStrProperty* ReturnProperty = CastField<FStrProperty>(Function->GetReturnProperty());
+		if (!ReturnProperty)
+		{
+			OutError = FString::Printf(TEXT("PCGEx Mediator '%s' does not return a string."), FunctionName);
+			return false;
+		}
+
+		Library->GetDefaultObject()->ProcessEvent(Function, Params.GetStructMemory());
+		OutResult = ReturnProperty->GetPropertyValue_InContainer(Params.GetStructMemory());
+		return true;
+	}
+
+	// A mediator result that is { "ok": false, ... } carries its diagnostics; anything else is a success payload.
+	bool IsFailure(const FString& Result, FString& OutMessage)
+	{
+		const TSharedPtr<FJsonObject> Object = ParseJsonObject(Result);
+		bool bOk = true;
+		if (!Object.IsValid() || !Object->TryGetBoolField(TEXT("ok"), bOk) || bOk) { return false; }
+
+		TArray<FString> Lines;
+		const TArray<TSharedPtr<FJsonValue>>* Diagnostics = nullptr;
+		if (Object->TryGetArrayField(TEXT("diagnostics"), Diagnostics))
+		{
+			for (const TSharedPtr<FJsonValue>& Item : *Diagnostics)
+			{
+				const TSharedPtr<FJsonObject>* Entry = nullptr;
+				if (!Item.IsValid() || !Item->TryGetObject(Entry)) { continue; }
+				FString Severity, Path, Message;
+				(*Entry)->TryGetStringField(TEXT("severity"), Severity);
+				(*Entry)->TryGetStringField(TEXT("path"), Path);
+				(*Entry)->TryGetStringField(TEXT("message"), Message);
+				Lines.Add(Path.IsEmpty() ? FString::Printf(TEXT("[%s] %s"), *Severity, *Message) : FString::Printf(TEXT("[%s] %s: %s"), *Severity, *Path, *Message));
+			}
+		}
+		OutMessage = Lines.IsEmpty() ? TEXT("PCGEx Mediator reported a failure without diagnostics.") : FString::Join(Lines, TEXT("\n"));
+		return true;
+	}
+
+	// Runs one library function and turns a mediator failure into a script error; returns "{}" on any failure.
+	FString Run(const TCHAR* FunctionName, const TMap<FName, FString>& Args)
+	{
+		FString Result, Error;
+		if (!Call(FunctionName, Args, Result, Error))
+		{
+			RaiseError(Error);
+			return TEXT("{}");
+		}
+		if (IsFailure(Result, Error))
+		{
+			RaiseError(Error);
+			return Result;
+		}
+		return Result;
+	}
+}
+
+FString UPCGExToolset::ListFormats()
+{
+	return PCGExAssistant::MediatorBridge::Run(TEXT("ListFormats"), {});
+}
+
+FString UPCGExToolset::DescribeFormat(const FString& FormatIdOrClass)
+{
+	return PCGExAssistant::MediatorBridge::Run(TEXT("DescribeFormat"), {{FName(TEXT("FormatIdOrClass")), FormatIdOrClass}});
+}
+
+FString UPCGExToolset::ExportJson(const FString& Target)
+{
+	return PCGExAssistant::MediatorBridge::Run(TEXT("ExportJson"), {{FName(TEXT("Target")), Target}});
+}
+
+FString UPCGExToolset::ImportJson(const FString& Target, const FString& Json)
+{
+	return PCGExAssistant::MediatorBridge::Run(TEXT("ImportJson"), {{FName(TEXT("Target")), Target}, {FName(TEXT("Json")), Json}});
 }
 
 #pragma endregion
