@@ -12,3 +12,5 @@ Intermediate/
 DerivedDataCache/
 Saved/
 Build/
+
+__pycache__/
