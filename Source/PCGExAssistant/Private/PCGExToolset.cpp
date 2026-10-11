@@ -4,6 +4,7 @@
 #include "PCGExToolset.h"
 
 #include "PCGExKnowledgeSearch.h"
+#include "PCGExMediatorBridge.h"
 
 #include "Dom/JsonObject.h"
 #include "HAL/FileManager.h"
@@ -624,6 +625,82 @@ FString UPCGExToolset::ListRegisteredNodeTypes(const FString& ModuleFilter)
 	return ToJsonString(Results);
 }
 
+namespace PCGExAssistant
+{
+	// Every struct with a mediator format is written in that format's shape, by the PCG toolset's UpdateNode too (the
+	// engine's import honors the struct converter registry); the raw reflection of those structs misleads.
+	TSet<FString> MediatorStructPaths()
+	{
+		TSet<FString> Out;
+		FString Result, Error;
+		if (!MediatorBridge::Call(TEXT("ListFormats"), {}, Result, Error) || MediatorBridge::IsFailure(Result, Error)) { return Out; }
+		const TSharedPtr<FJsonObject> List = ParseJsonObject(Result);
+		const TArray<TSharedPtr<FJsonValue>>* Formats = nullptr;
+		if (!List.IsValid() || !List->TryGetArrayField(TEXT("formats"), Formats)) { return Out; }
+		for (const TSharedPtr<FJsonValue>& Item : *Formats)
+		{
+			const TSharedPtr<FJsonObject>* Format = nullptr;
+			FString Path;
+			if (Item.IsValid() && Item->TryGetObject(Format) && (*Format)->TryGetStringField(TEXT("struct"), Path) && !Path.IsEmpty()) { Out.Add(Path); }
+		}
+		return Out;
+	}
+
+	// The body schema (the envelope's "data") of a struct's mediator format, by struct path.
+	TSharedPtr<FJsonObject> MediatorBodySchema(const FString& StructPath)
+	{
+		FString Result, Error;
+		if (!MediatorBridge::Call(TEXT("DescribeFormat"), {{FName(TEXT("FormatIdOrClass")), StructPath}}, Result, Error) || MediatorBridge::IsFailure(Result, Error)) { return nullptr; }
+		const TSharedPtr<FJsonObject> Envelope = ParseJsonObject(Result);
+		const TSharedPtr<FJsonObject>* Props = nullptr;
+		const TSharedPtr<FJsonObject>* Data = nullptr;
+		if (!Envelope.IsValid() || !Envelope->TryGetObjectField(TEXT("properties"), Props) || !(*Props)->TryGetObjectField(TEXT("data"), Data)) { return nullptr; }
+
+		FString FormatId;
+		const TSharedPtr<FJsonObject>* Format = nullptr;
+		if ((*Props)->TryGetObjectField(TEXT("format"), Format)) { (*Format)->TryGetStringField(TEXT("const"), FormatId); }
+		(*Data)->SetStringField(TEXT("$comment"), FString::Printf(TEXT("mediator format %s: the shape UpdateNode and ImportJson accept for this struct"), *FormatId));
+		return *Data;
+	}
+
+	// Replaces the reflected schema of every param whose struct, or array element struct, has a mediator format.
+	void SubstituteMediatorSchemas(const TSharedPtr<FJsonObject>& Schema, const TArray<FProperty*>& Properties)
+	{
+		const TSharedPtr<FJsonObject>* SchemaProperties = nullptr;
+		if (!Schema->TryGetObjectField(TEXT("properties"), SchemaProperties)) { return; }
+		const TSet<FString> Paths = MediatorStructPaths();
+		if (Paths.IsEmpty()) { return; }
+
+		TMap<FString, TSharedPtr<FJsonObject>> Bodies;
+		for (const FProperty* Property : Properties)
+		{
+			const FStructProperty* Direct = CastField<FStructProperty>(Property);
+			const FArrayProperty* Array = CastField<FArrayProperty>(Property);
+			const FStructProperty* Target = Direct ? Direct : (Array ? CastField<FStructProperty>(Array->Inner) : nullptr);
+			if (!Target || !Paths.Contains(Target->Struct->GetPathName())) { continue; }
+
+			const FString Path = Target->Struct->GetPathName();
+			const TSharedPtr<FJsonObject>* Cached = Bodies.Find(Path);
+			const TSharedPtr<FJsonObject> Body = Cached ? *Cached : Bodies.Add(Path, MediatorBodySchema(Path));
+			if (!Body.IsValid()) { continue; }
+
+			const TSharedPtr<FJsonObject>* Old = nullptr;
+			FString Description;
+			if ((*SchemaProperties)->TryGetObjectField(Property->GetName(), Old)) { (*Old)->TryGetStringField(TEXT("description"), Description); }
+
+			const TSharedRef<FJsonObject> Replacement = MakeShared<FJsonObject>();
+			if (Direct) { Replacement->Values = Body->Values; }
+			else
+			{
+				Replacement->SetStringField(TEXT("type"), TEXT("array"));
+				Replacement->SetObjectField(TEXT("items"), Body);
+			}
+			if (!Description.IsEmpty() && !Replacement->HasField(TEXT("description"))) { Replacement->SetStringField(TEXT("description"), Description); }
+			(*SchemaProperties)->SetObjectField(Property->GetName(), Replacement);
+		}
+	}
+}
+
 FString UPCGExToolset::GetNodeSchema(const FString& SettingsClass)
 {
 	using namespace PCGExAssistant;
@@ -675,7 +752,9 @@ FString UPCGExToolset::GetNodeSchema(const FString& SettingsClass)
 	Out->SetArrayField(TEXT("outputs"), PinsToJson(CDO->OutputPinProperties(), KnowledgeOutputs));
 
 	TArray<FString> Advanced;
-	const TSharedPtr<FJsonObject> Schema = PropertiesSchema(WritableProperties(Class, Advanced));
+	const TArray<FProperty*> Writable = WritableProperties(Class, Advanced);
+	const TSharedPtr<FJsonObject> Schema = PropertiesSchema(Writable);
+	SubstituteMediatorSchemas(Schema, Writable);
 	if (Entry) { AnnotateProperties(Schema, Entry); }
 	Out->SetObjectField(TEXT("properties"), Schema);
 

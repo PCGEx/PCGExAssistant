@@ -13,22 +13,24 @@ class UPCGNode;
 
 /**
  * Expert knowledge and tooling for PCGEx (PCG Extended Toolkit) and its sibling plugins
- * (Valency, Clusters Sketch, ZoneGraph). PCGEx extends stock PCG with clusters
- * (vtx/edge connectivity structures), path processing, filter ensembles, tensors,
- * pathfinding, asset staging and hundreds of specialized nodes.
- * Use this toolset whenever a task involves a PCGEx node, a cluster or path workflow,
- * or choosing between PCGEx nodes: it can search the full node knowledge base
- * (purpose, mechanism, pin contracts, settings semantics, known traps), read concept
- * documentation, report which PCGEx plugins and versions are installed, and place
- * PCGEx nodes in a PCG graph. The stock PCG toolset cannot create or describe PCGEx
- * nodes: use CreateNode and AddSubnodes here for those, and the PCG toolset's
+ * (Valency, Clusters Sketch, ZoneGraph), with two jobs: working with PCGEx nodes in PCG graphs,
+ * and authoring PCGEx data as JSON (the assets and data-hosting nodes ListFormats reports; the
+ * PCGEx skill carries each domain's guide). PCGEx extends stock PCG with clusters (vtx/edge
+ * connectivity structures), path
+ * processing, filter ensembles, tensors, pathfinding, asset staging and hundreds of specialized nodes.
+ * Nodes: it searches the full node knowledge base (purpose, mechanism, pin contracts, settings
+ * semantics, known traps), reads concept documentation, reports which PCGEx plugins and versions
+ * are installed, and places PCGEx nodes in a PCG graph. The stock PCG toolset cannot create or
+ * describe PCGEx nodes: use CreateNode and AddSubnodes here for those, and the PCG toolset's
  * UpdateNode and ConnectNodePins for everything once a node exists.
- * It also reads and writes PCGEx data as JSON (property schemas, Tuple and Distribute Tuple
- * nodes, asset collections) through ListFormats, DescribeFormat, ExportJson and ImportJson, creates
- * and saves PCGEx assets (CreateAsset, SaveAsset) and can undo its last edit (Undo).
- * This is NOT the right toolset for stock PCG questions; use it when node names carry
- * PCGEx category prefixes such as "Cluster :", "Path :", "Vtx :", or when stock PCG
- * lacks the needed operation.
+ * Data: ListFormats and DescribeFormat tell which assets and nodes have a JSON document and its
+ * schema, DescribeTarget what one instance offers (resolved properties, defaults, choices),
+ * ExportJson and ImportJson read and write the document, CreateAsset and SaveAsset create and
+ * persist assets, RunAction runs editor actions on a target, and Undo reverts the last edit.
+ * Use it whenever a task mentions PCGEx, involves a cluster or path workflow, asks to create,
+ * fill or edit PCGEx data (assets or data-hosting nodes), names a node with a PCGEx category
+ * prefix such as "Cluster :", "Path :", "Vtx :", or needs an operation stock PCG lacks. It is NOT
+ * the right toolset for stock PCG questions.
  */
 UCLASS(BlueprintType)
 class PCGEXASSISTANT_API UPCGExToolset : public UToolsetDefinition
@@ -104,6 +106,8 @@ public:
 	 * semantics and traps where an entry exists. Read this before setting params or
 	 * connecting pins: it is the ground truth for property names, types and pin labels.
 	 * @param SettingsClass The C++ settings class name, e.g. UPCGExBevelPathSettings. Any UPCGSettings subclass is accepted, stock PCG included.
+	 * Params whose struct has a PCGEx mediator format are described in that format's shape, the one UpdateNode and
+	 * ImportJson accept, marked by a $comment naming the format; their raw reflection is never shown.
 	 * @return JSON object: { class, displayName, module, hidden?, knowledge?: { id, name, url, classification, inherits? }, inputs: [{ label, types, status, multipleConnections, tooltip?, knowledge? }], outputs: [...], properties: JSON Schema of the writable params (each property may carry a knowledge object with semantics, trap, interactsWith, see, enum), advancedProperties: [names] }.
 	 */
 	UFUNCTION(meta = (AICallable), Category = "PCGEx|Introspection")

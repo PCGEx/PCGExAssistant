@@ -58,6 +58,32 @@ EDITING GRAPHS
   Many PCGEx nodes have conditional pins that only exist under specific settings;
   GetNode's pin contract says which.
 
+AUTHORING DATA AS JSON
+- PCGEx data is authored as JSON documents: Property Schema assets, asset
+  collections (mesh, actor, omni, ...) and the Tuple / Distribute Tuple nodes.
+  "Create a schema with a float and an enum", "add entries to a collection",
+  "fill this Tuple" are authoring tasks; never answer them with Content Browser
+  instructions.
+- Chain: ListFormats (which classes and structs are bound) -> DescribeFormat (the
+  JSON Schema of a format or bound class) and DescribeTarget (one instance's
+  resolved properties, defaults and choices) -> CreateAsset when the asset does
+  not exist -> ImportJson -> SaveAsset. Undo reverts the last import whole.
+- Start from ExportJson when the target exists: its output is sparse (values at
+  struct default are omitted) and ImportJson accepts it back, so edit and
+  re-import. Nothing applies unless the whole document decodes; diagnostics
+  carry the path of every problem.
+- Merge rules: members present in the document replace the host's, absent
+  members are untouched. A property schema document is the whole schema and an
+  override set is the full enabled set. Array members (collection entries, Tuple
+  rows) merge BY POSITION: rows beyond the host are created, rows the document
+  lacks are removed, and inside a row an absent key keeps the existing value.
+- A node whose class ListFormats reports as bound (Tuple, Distribute Tuple) is
+  edited with ExportJson / ImportJson, targeted as "<graph object path>:<node
+  title or name>". Do not follow GetNodeSchema into UpdateNode for those members:
+  it reports their raw reflected shape, which UpdateNode rejects.
+- Values travel in the mediator dialect: enums by enumerator name, vectors as
+  arrays, rotators as {pitch, yaw, roll}; DescribeFormat is the truth for each.
+
 VOCABULARY
 - Cluster, not graph. Vtx, not vertex. PCGEx, not PCGEX. Node display names carry
   category prefixes ("Path : Bevel", "Cluster : Connect"); use display names when
@@ -71,8 +97,10 @@ class PCGExBasicsSkill(unreal.AgentSkill):
     (Valency, Cluster Sketch, ZoneGraph). Use this skill whenever a task mentions
     PCGEx, involves clusters (vtx/edge connectivity over points), path processing,
     pathfinding on point data, filter ensembles, tensors, or asset staging beyond
-    stock PCG, or touches any node whose name carries a PCGEx category prefix such
-    as "Cluster :", "Path :", "Vtx :", "Filter :". PCGEx questions must be answered
+    stock PCG, touches any node whose name carries a PCGEx category prefix such
+    as "Cluster :", "Path :", "Vtx :", "Filter :", or asks to create, fill or edit
+    PCGEx data (property schemas, asset collections, Tuple and Distribute Tuple
+    nodes), which this toolset authors as JSON. PCGEx questions must be answered
     from its knowledge-base toolset, never from prior knowledge. Not needed for
     purely stock PCG work involving no PCGEx nodes."""
 
