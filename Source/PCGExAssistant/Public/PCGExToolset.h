@@ -237,4 +237,30 @@ public:
 	 */
 	UFUNCTION(meta = (AICallable), Category = "PCGEx|Authoring")
 	static FString Undo();
+
+	/**
+	 * What one bound target offers right now, as data rather than a type schema: for a schema host (Property
+	 * Schema asset, asset collection, Tuple or Distribute Tuple node) every resolved property with its name, type,
+	 * declaring asset, effective default and its effective choices and lock after every import patch. Read it before
+	 * writing override values or picks against that host: DescribeFormat cannot know an instance's choices.
+	 * @param Target Object path of the asset, or <graph object path>:<node title or name> for a node.
+	 * @return JSON object { target, class, properties: [{ name, type, declaredBy, overridden, default, choices?: { locked, items: [{ label, value }] }, patched? }], imports }; falls back to the class's object schema when the binding describes no instance; an error when the target does not resolve or has no binding.
+	 */
+	UFUNCTION(meta = (AICallable), Category = "PCGEx|Authoring")
+	static FString DescribeTarget(const FString& Target);
+
+	/**
+	 * Run a registered mediator action on a bound target, undoable (one transaction). Actions are editor levers no
+	 * document expresses; ListFormats lists them under "actions" with their target class and params schema.
+	 * Today: "pcgex.align-choices" with params { "property": "<name>" } snaps every enabled row whose value is none of
+	 * that property's choices onto the default choice (or the first that fits); on a Property Schema asset it sweeps
+	 * every LOADED collection, node, component and schema asset importing it (unloaded assets and Blueprint templates
+	 * are not visited), on any other host only that host's rows. Rows already on a choice are left alone.
+	 * @param ActionId The action id from ListFormats, e.g. pcgex.align-choices.
+	 * @param Target Object path of the asset, or <graph object path>:<node title or name> for a node.
+	 * @param ParamsJson JSON object of params per the action's params schema; empty for none.
+	 * @return JSON object { ok, ...action result, diagnostics }: align-choices returns { property, scope, rowsAligned, hostsTouched, hostsVisited, changed }; raises an error when the action, target or params are wrong.
+	 */
+	UFUNCTION(meta = (AICallable), Category = "PCGEx|Authoring")
+	static FString RunAction(const FString& ActionId, const FString& Target, const FString& ParamsJson = FString());
 };

@@ -1058,6 +1058,16 @@ FString UPCGExToolset::Undo()
 	return PCGExAssistant::MediatorBridge::Run(TEXT("Undo"), {});
 }
 
+FString UPCGExToolset::DescribeTarget(const FString& Target)
+{
+	return PCGExAssistant::MediatorBridge::Run(TEXT("DescribeTarget"), {{FName(TEXT("Target")), Target}});
+}
+
+FString UPCGExToolset::RunAction(const FString& ActionId, const FString& Target, const FString& ParamsJson)
+{
+	return PCGExAssistant::MediatorBridge::Run(TEXT("RunAction"), {{FName(TEXT("ActionId")), ActionId}, {FName(TEXT("Target")), Target}, {FName(TEXT("ParamsJson")), ParamsJson}});
+}
+
 #pragma endregion
 
 #undef LOCTEXT_NAMESPACE
