@@ -8,6 +8,7 @@
 
 #include "Dom/JsonObject.h"
 #include "HAL/FileManager.h"
+#include "JsonObjectConverter.h"
 #include "Interfaces/IPluginManager.h"
 #include "Kismet/KismetSystemLibrary.h"
 #include "Misc/FileHelper.h"
@@ -334,8 +335,9 @@ namespace PCGExAssistant
 		return Out;
 	}
 
-	// JSON Schema of the writable params, in the shape UToolsetLibrary::SetObjectProperties
-	// consumes. Built through a property bag so struct- and object-typed params render the
+	// The property map of the writable params' JSON Schema (ListStructProperties returns the map, not a wrapper),
+	// keyed by FJsonObjectConverter::StandardizeCase of the property name, in the shape UToolsetLibrary::
+	// SetObjectProperties consumes. Built through a property bag so struct- and object-typed params render the
 	// same way the engine's own toolsets render them.
 	TSharedPtr<FJsonObject> PropertiesSchema(const TArray<FProperty*>& Properties)
 	{
@@ -353,12 +355,11 @@ namespace PCGExAssistant
 		return Schema ? Schema : MakeShared<FJsonObject>();
 	}
 
-	// Copies the authored layer of a bundle setting onto the schema of the same property.
-	void AnnotateProperties(const TSharedPtr<FJsonObject>& Schema, const TSharedPtr<FJsonObject>& Entry)
+	// Copies the authored layer of a bundle setting onto the schema of the same property (FString keys match case-insensitively).
+	void AnnotateProperties(const TSharedPtr<FJsonObject>& SchemaProperties, const TSharedPtr<FJsonObject>& Entry)
 	{
-		const TSharedPtr<FJsonObject>* SchemaProperties = nullptr;
 		const TSharedPtr<FJsonObject>* Settings = nullptr;
-		if (!Schema->TryGetObjectField(TEXT("properties"), SchemaProperties) || !Entry->TryGetObjectField(TEXT("settings"), Settings)) { return; }
+		if (!Entry->TryGetObjectField(TEXT("settings"), Settings)) { return; }
 
 		struct FCopiedField
 		{
@@ -375,7 +376,7 @@ namespace PCGExAssistant
 			{TEXT("tooltip"), TEXT("tooltip")},
 		};
 
-		for (const TPair<FString, TSharedPtr<FJsonValue>>& Pair : (*SchemaProperties)->Values)
+		for (const TPair<FString, TSharedPtr<FJsonValue>>& Pair : SchemaProperties->Values)
 		{
 			const TSharedPtr<FJsonObject>* PropertySchema = nullptr;
 			const TSharedPtr<FJsonObject>* Setting = nullptr;
@@ -664,10 +665,8 @@ namespace PCGExAssistant
 	}
 
 	// Replaces the reflected schema of every param whose struct, or array element struct, has a mediator format.
-	void SubstituteMediatorSchemas(const TSharedPtr<FJsonObject>& Schema, const TArray<FProperty*>& Properties)
+	void SubstituteMediatorSchemas(const TSharedPtr<FJsonObject>& SchemaProperties, const TArray<FProperty*>& Properties)
 	{
-		const TSharedPtr<FJsonObject>* SchemaProperties = nullptr;
-		if (!Schema->TryGetObjectField(TEXT("properties"), SchemaProperties)) { return; }
 		const TSet<FString> Paths = MediatorStructPaths();
 		if (Paths.IsEmpty()) { return; }
 
@@ -684,9 +683,10 @@ namespace PCGExAssistant
 			const TSharedPtr<FJsonObject> Body = Cached ? *Cached : Bodies.Add(Path, MediatorBodySchema(Path));
 			if (!Body.IsValid()) { continue; }
 
+			const FString Key = FJsonObjectConverter::StandardizeCase(Property->GetName());
 			const TSharedPtr<FJsonObject>* Old = nullptr;
 			FString Description;
-			if ((*SchemaProperties)->TryGetObjectField(Property->GetName(), Old)) { (*Old)->TryGetStringField(TEXT("description"), Description); }
+			if (SchemaProperties->TryGetObjectField(Key, Old)) { (*Old)->TryGetStringField(TEXT("description"), Description); }
 
 			const TSharedRef<FJsonObject> Replacement = MakeShared<FJsonObject>();
 			if (Direct) { Replacement->Values = Body->Values; }
@@ -696,7 +696,7 @@ namespace PCGExAssistant
 				Replacement->SetObjectField(TEXT("items"), Body);
 			}
 			if (!Description.IsEmpty() && !Replacement->HasField(TEXT("description"))) { Replacement->SetStringField(TEXT("description"), Description); }
-			(*SchemaProperties)->SetObjectField(Property->GetName(), Replacement);
+			SchemaProperties->SetObjectField(Key, Replacement);
 		}
 	}
 }

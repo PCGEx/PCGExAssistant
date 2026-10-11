@@ -20,10 +20,10 @@ namespace PCGExAgentSkillPrompt
 		return Object;
 	}
 
-	FString Pretty(const TSharedRef<FJsonObject>& Object)
+	FString OneLine(const TSharedRef<FJsonObject>& Object)
 	{
 		FString Out;
-		const TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&Out);
+		const TSharedRef<TJsonWriter<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>> Writer = TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&Out);
 		FJsonSerializer::Serialize(Object, Writer);
 		return Out;
 	}
@@ -67,7 +67,7 @@ namespace PCGExAgentSkillPrompt
 		}
 	}
 
-	// Each domain's guide verbatim, then its example documents pretty-printed.
+	// Each domain's guide verbatim, then its example documents, one line each.
 	void AppendGuides(const FJsonObject& Guides, FString& Out)
 	{
 		const TArray<TSharedPtr<FJsonValue>>* Items = nullptr;
@@ -94,7 +94,7 @@ namespace PCGExAgentSkillPrompt
 			for (const TSharedPtr<FJsonValue>& Example : *Examples)
 			{
 				const TSharedPtr<FJsonObject>* Doc = nullptr;
-				if (Example.IsValid() && Example->TryGetObject(Doc)) { Out += TEXT("Example ImportJson document:\n") + Pretty(Doc->ToSharedRef()) + TEXT("\n"); }
+				if (Example.IsValid() && Example->TryGetObject(Doc)) { Out += TEXT("Example ImportJson document: ") + OneLine(Doc->ToSharedRef()) + TEXT("\n"); }
 			}
 		}
 	}
@@ -159,6 +159,18 @@ UPCGExAgentSkill::UPCGExAgentSkill()
 		TEXT("which the PCG toolset's UpdateNode accepts as well.\n")
 		TEXT("- Values travel in the mediator dialect: enums by enumerator name, vectors as arrays, rotators as {pitch, yaw, roll}; ")
 		TEXT("DescribeFormat is the truth for each.\n")
+		TEXT("- Lay wording routes here: a user's field, column, attribute, setting or option is a property; their template, preset, ")
+		TEXT("list, library, palette, table or rows is one of the bound hosts (the guides below say which). Never ask the user what a schema is.\n")
+		TEXT("- Units: lengths arrive in meters or centimeters; Unreal units are centimeters. Convert (30 m -> 3000) and state the ")
+		TEXT("conversion in the reply.\n")
+		TEXT("- Invented values are listed back: a prompt rarely gives defaults, ranges, a folder or an asset name. Pick sensible values ")
+		TEXT("instead of interrogating the user, then end the reply with one line per value you invented so they can correct it. Ask ")
+		TEXT("only when the folder or name cannot be guessed from the user's words, the project or earlier in the conversation.\n")
+		TEXT("- Names: property names are PascalCase identifiers derived from the user's words (facade color -> FacadeColor); they become ")
+		TEXT("attribute names, so no spaces or punctuation. Asset names follow the prefix convention visible in the project (PS_ for ")
+		TEXT("schemas, SMC_ or DAC_ for collections), else plain PascalCase.\n")
+		TEXT("- Confirm by describing: after an import, call DescribeTarget and report the resolved properties, defaults and choices ")
+		TEXT("from it, not from the document you sent.\n")
 		TEXT("\nVOCABULARY\n")
 		TEXT("- Cluster, not graph. Vtx, not vertex. PCGEx, not PCGEX. Node display names carry category prefixes (\"Path : Bevel\", ")
 		TEXT("\"Cluster : Connect\"); use display names when talking to the user, class names when calling tools.\n");
