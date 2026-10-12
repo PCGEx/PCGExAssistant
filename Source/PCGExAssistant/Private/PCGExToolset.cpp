@@ -1147,6 +1147,11 @@ FString UPCGExToolset::RunAction(const FString& ActionId, const FString& Target,
 	return PCGExAssistant::MediatorBridge::Run(TEXT("RunAction"), {{FName(TEXT("ActionId")), ActionId}, {FName(TEXT("Target")), Target}, {FName(TEXT("ParamsJson")), ParamsJson}});
 }
 
+FString UPCGExToolset::Open(const FString& Target)
+{
+	return PCGExAssistant::MediatorBridge::Run(TEXT("Open"), {{FName(TEXT("Target")), Target}});
+}
+
 #pragma endregion
 
 #undef LOCTEXT_NAMESPACE

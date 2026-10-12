@@ -165,20 +165,22 @@ public:
 	 * List the JSON formats and the object bindings the PCGEx mediator registers in this editor
 	 * session: which structs have a JSON shape (property schemas, override sets, collection
 	 * entries, ...) and which asset or node classes can be exported and imported as a whole,
-	 * with the members that travel. Call this before DescribeFormat when unsure what exists.
-	 * @return JSON object: { formats: [{ id, version, struct, summary }], bindings: [{ class, members, summary }] }.
+	 * with the members that travel, and the registered actions (id, target, summary; DescribeFormat(<action id>)
+	 * has an action's params schema). Call this before DescribeFormat when unsure what exists.
+	 * @return JSON object: { formats: [{ id, version, struct, summary }], bindings: [{ class, members, summary }], actions: [{ id, target, summary }] }.
 	 */
 	UFUNCTION(meta = (AICallable), Category = "PCGEx|Authoring")
 	static FString ListFormats();
 
 	/**
-	 * The JSON Schema (draft 2020-12) of a mediator format, of a bound class's object document, or of
-	 * any struct by path. Read it before writing a document for ImportJson: it is the ground truth for
-	 * key names, value shapes (vectors as arrays, rotators as {pitch, yaw, roll}, enums by name) and
-	 * the per-type value shapes of property schemas ($defs/values). Entry schemas collapse nested
-	 * structs (component descriptors, variations) to a one-line fragment whose $comment names the
-	 * struct path to pass here for the full shape; ask for it only when you need to author those fields.
-	 * @param FormatIdOrClass A format id from ListFormats (e.g. pcgex.property-schema), a bound class name or path (e.g. UPCGExTupleSettings), or a struct path from a collapsed fragment (e.g. /Script/PCG.PCGSoftISMComponentDescriptor).
+	 * The JSON Schema (draft 2020-12) of a mediator format, of an action's params, of a bound class's
+	 * object document, or of any struct by path. Read it before writing a document for ImportJson or
+	 * params for RunAction: it is the ground truth for key names, value shapes (vectors as arrays,
+	 * rotators as {pitch, yaw, roll}, enums by name) and the per-type value shapes of property schemas
+	 * ($defs/values). Schemas collapse nested bodies (component descriptors, variations, embedded
+	 * property schemas) to a one-line fragment whose $comment names what to pass here for the full
+	 * shape; ask for it only when you need to author those fields.
+	 * @param FormatIdOrClass A format id or an action id from ListFormats (e.g. pcgex.property-schema, pcgex.sketch.build), a bound class name or path (e.g. UPCGExTupleSettings), or a struct path from a collapsed fragment (e.g. /Script/PCG.PCGSoftISMComponentDescriptor).
 	 * @return JSON Schema object, or an error when nothing matches.
 	 */
 	UFUNCTION(meta = (AICallable), Category = "PCGEx|Authoring")
@@ -188,7 +190,7 @@ public:
 	 * Export a bound object as a JSON document: an asset by object path (a Property Schema asset,
 	 * an asset collection) or a node's settings as "<graph object path>:<node title>" (Tuple,
 	 * Distribute Tuple). The result is what ImportJson accepts back, so edit and re-import it.
-	 * @param Target Object path of the asset, or <graph object path>:<node title or name> for a node.
+	 * @param Target Object path of the asset, <graph object path>:<node title or name> for a node, or a target alias written with a leading at sign: focused (what the user is looking at) or selected (the level or Content Browser selection); the PCGEx skill spells them.
 	 * @return The JSON document { format, version, data }, or an error with diagnostics when the target does not resolve or has no binding.
 	 */
 	UFUNCTION(meta = (AICallable), Category = "PCGEx|Authoring")
@@ -204,7 +206,7 @@ public:
 	 * (or the default on a new row), so a partial entry is safe and the sparse ExportJson output
 	 * is the normal starting point. Nothing changes unless the whole document decodes; every
 	 * problem is reported with its path in the document (e.g. data/members/Entries/1/Weight).
-	 * @param Target Object path of the asset, or <graph object path>:<node title or name> for a node.
+	 * @param Target Object path of the asset, <graph object path>:<node title or name> for a node, or a target alias written with a leading at sign: focused (what the user is looking at) or selected (the level or Content Browser selection); the PCGEx skill spells them.
 	 * @param Json The document, as produced by ExportJson or written to DescribeFormat's schema.
 	 * @return JSON object { ok, diagnostics: [{ severity, path, message }] }; on failure the call also raises an error carrying the diagnostics.
 	 */
@@ -247,7 +249,7 @@ public:
 	 * Schema asset, asset collection, Tuple or Distribute Tuple node) every resolved property with its name, type,
 	 * declaring asset, effective default and its effective choices and lock after every import patch. Read it before
 	 * writing override values or picks against that host: DescribeFormat cannot know an instance's choices.
-	 * @param Target Object path of the asset, or <graph object path>:<node title or name> for a node.
+	 * @param Target Object path of the asset, <graph object path>:<node title or name> for a node, or a target alias written with a leading at sign: focused (what the user is looking at) or selected (the level or Content Browser selection); the PCGEx skill spells them.
 	 * @return JSON object { target, class, properties: [{ name, type, declaredBy, overridden, default, choices?: { locked, items: [{ label, value }] }, patched? }], imports }; falls back to the class's object schema when the binding describes no instance; an error when the target does not resolve or has no binding.
 	 */
 	UFUNCTION(meta = (AICallable), Category = "PCGEx|Authoring")
@@ -255,16 +257,27 @@ public:
 
 	/**
 	 * Run a registered mediator action on a bound target, undoable (one transaction). Actions are editor levers no
-	 * document expresses; ListFormats lists them under "actions" with their target class and params schema.
-	 * Today: "pcgex.align-choices" with params { "property": "<name>" } snaps every enabled row whose value is none of
-	 * that property's choices onto the default choice (or the first that fits); on a Property Schema asset it sweeps
-	 * every LOADED collection, node, component and schema asset importing it (unloaded assets and Blueprint templates
-	 * are not visited), on any other host only that host's rows. Rows already on a choice are left alone.
-	 * @param ActionId The action id from ListFormats, e.g. pcgex.align-choices.
-	 * @param Target Object path of the asset, or <graph object path>:<node title or name> for a node.
-	 * @param ParamsJson JSON object of params per the action's params schema; empty for none.
-	 * @return JSON object { ok, ...action result, diagnostics }: align-choices returns { property, scope, rowsAligned, hostsTouched, hostsVisited, changed }; raises an error when the action, target or params are wrong.
+	 * document expresses; ListFormats lists them under "actions" with their target class and summary, and
+	 * DescribeFormat(<action id>) is the params schema to read before the first call. Examples: "pcgex.align-choices"
+	 * with params { "property": "<name>" } snaps every enabled row whose value is none of that property's choices onto
+	 * the default choice (on a Property Schema asset it sweeps every LOADED importer, on any other host only that
+	 * host's rows); the "pcgex.sketch.*" actions author Cluster Sketch geometry (build, move, remove, ...).
+	 * @param ActionId The action id from ListFormats, e.g. pcgex.align-choices or pcgex.sketch.build.
+	 * @param Target Object path of the asset, <graph object path>:<node title or name> for a node, or a target alias written with a leading at sign: focused (what the user is looking at) or selected (the level or Content Browser selection); the PCGEx skill spells them.
+	 * @param ParamsJson JSON object of params per DescribeFormat(<action id>); empty for none.
+	 * @return JSON object { ok, ...action result, diagnostics }, the result shape being the one the action's params schema describes; raises an error when the action, target or params are wrong.
 	 */
 	UFUNCTION(meta = (AICallable), Category = "PCGEx|Authoring")
 	static FString RunAction(const FString& ActionId, const FString& Target, const FString& ParamsJson = FString());
+
+	/**
+	 * Bring a target in front of the user so they can watch the edits land: an asset opens in its editor (through the
+	 * Content Browser's own activation path, and the browser syncs to it), a node opens its graph editor and is focused,
+	 * a level component selects its actor and frames it, and a Cluster Sketch component or payload also enters the
+	 * Cluster Sketch level mode. Chain it after CreateAsset and before RunAction / ImportJson for live review.
+	 * @param Target Object path, <graph object path>:<node title or name>, or a target alias (at sign + focused, at sign + selected).
+	 * @return JSON object { ok, target, opened } saying how it was shown; raises an error when the target does not resolve or cannot be opened.
+	 */
+	UFUNCTION(meta = (AICallable), Category = "PCGEx|Authoring")
+	static FString Open(const FString& Target);
 };
