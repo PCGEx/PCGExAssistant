@@ -159,7 +159,7 @@ public:
 
 	// ~ Authoring. PCGEx data as JSON through the PCGExMediator formats: a document is
 	// { "format", "version", "data" }; an object document's data is { "class", "members": { <member>: <body> } }.
-	// Served by PCGExtendedToolkit's UPCGExMediatorLibrary, reached by reflection: this plugin ships alone.
+	// Served by PCGExToolset's UPCGExMediatorLibrary, reached by reflection: this plugin ships alone.
 
 	/**
 	 * List the JSON formats and the object bindings the PCGEx mediator registers in this editor

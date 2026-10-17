@@ -1012,7 +1012,7 @@ FString UPCGExToolset::AddSubnodes(UPCGGraph* Graph, UPCGNode* TargetNode, const
 
 namespace PCGExAssistant::MediatorBridge
 {
-	// PCGExtendedToolkit ships separately; its UPCGExMediatorLibrary is an optional peer reached by name, never
+	// PCGExToolset ships separately; its UPCGExMediatorLibrary is an optional peer reached by name, never
 	// linked. Every parameter and the return value are FStrings, so the call needs no shared header.
 	const TCHAR* const LibraryPath = TEXT("/Script/PCGExMediator.PCGExMediatorLibrary");
 
@@ -1021,13 +1021,13 @@ namespace PCGExAssistant::MediatorBridge
 		UClass* Library = FindObject<UClass>(nullptr, LibraryPath);
 		if (!Library)
 		{
-			OutError = TEXT("PCGEx Mediator is not available: this needs PCGExtendedToolkit with its PCGExMediator module enabled.");
+			OutError = TEXT("PCGEx Mediator is not available: this needs the PCGExToolset plugin enabled.");
 			return false;
 		}
 		UFunction* Function = Library->FindFunctionByName(FunctionName);
 		if (!Function || !Function->HasAnyFunctionFlags(FUNC_Static))
 		{
-			OutError = FString::Printf(TEXT("PCGEx Mediator has no '%s' function; the installed PCGExtendedToolkit is older than this toolset."), FunctionName);
+			OutError = FString::Printf(TEXT("PCGEx Mediator has no '%s' function; the installed PCGExToolset is older than this plugin."), FunctionName);
 			return false;
 		}
 

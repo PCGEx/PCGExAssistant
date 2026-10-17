@@ -6,7 +6,7 @@
 #include "CoreMinimal.h"
 
 /**
- * PCGExtendedToolkit's UPCGExMediatorLibrary, reached by name through UFunction: this plugin ships alone and never
+ * PCGExToolset's UPCGExMediatorLibrary, reached by name through UFunction: this plugin ships alone and never
  * links it. Every parameter and the return value are FStrings, so no shared header is needed.
  */
 namespace PCGExAssistant::MediatorBridge
