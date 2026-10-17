@@ -280,4 +280,16 @@ public:
 	 */
 	UFUNCTION(meta = (AICallable), Category = "PCGEx|Authoring")
 	static FString Open(const FString& Target);
+
+	/**
+	 * Spawn an actor of a class into the open level, undoable. Mechanics only: a class with creation rules of its own
+	 * (a Valency context volume or cage) goes through its domain action (ListFormats "actions"), which this call would
+	 * bypass. DescribeTarget on the level alias (at sign + level) lists every host actor and component in the level.
+	 * @param ClassNameOrPath Class path, short name or C++ name of an actor class.
+	 * @param TransformJson World transform in the dialect: { "location": [x, y, z], "rotation": [pitch, yaw, roll] or a quaternion, "scale": [x, y, z] }, each optional; "" for identity.
+	 * @param Label Actor label to set; "" keeps the generated name.
+	 * @return JSON object { ok, actor, label, class, bound } or a failure object with diagnostics.
+	 */
+	UFUNCTION(meta = (AICallable), Category = "PCGEx|Authoring")
+	static FString SpawnActor(const FString& ClassNameOrPath, const FString& TransformJson = FString(), const FString& Label = FString());
 };

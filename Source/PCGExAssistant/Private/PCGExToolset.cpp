@@ -1152,6 +1152,11 @@ FString UPCGExToolset::Open(const FString& Target)
 	return PCGExAssistant::MediatorBridge::Run(TEXT("Open"), {{FName(TEXT("Target")), Target}});
 }
 
+FString UPCGExToolset::SpawnActor(const FString& ClassNameOrPath, const FString& TransformJson, const FString& Label)
+{
+	return PCGExAssistant::MediatorBridge::Run(TEXT("SpawnActor"), {{FName(TEXT("ClassNameOrPath")), ClassNameOrPath}, {FName(TEXT("TransformJson")), TransformJson}, {FName(TEXT("Label")), Label}});
+}
+
 #pragma endregion
 
 #undef LOCTEXT_NAMESPACE
