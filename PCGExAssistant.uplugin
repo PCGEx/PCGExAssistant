@@ -10,7 +10,7 @@
   "DocsURL": "https://pcgex.gitbook.io/pcgex/",
   "SupportURL": "https://discord.gg/mde2vC5gbE",
   "FabURL": "com.epicgames.launcher://ue/Fab/product/8e66a219-3eb4-41b6-9a4e-7aaab99ff528",
-  "EngineVersion": "5.8.0",
+  "EngineVersion": "5.9.0",
   "EditorOnly": true,
   "EnabledByDefault": false,
   "CanContainContent": true,
