@@ -25,6 +25,8 @@ public class PCGExAssistant : ModuleRules
 			"JsonUtilities",
 			"Projects", // IPluginManager -> plugin base dir for the Knowledge/ bundle
 			"PCG",
+			"PropertyEditor", // UE::PropertyEditor::CheckCanSetProperty, the edit gates SetObjectProperties applies
+			"ToolsetRegistryEditor", // UToolsetLibrary
 		});
 	}
 }

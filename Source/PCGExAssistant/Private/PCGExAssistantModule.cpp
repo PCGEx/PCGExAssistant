@@ -12,11 +12,7 @@ DEFINE_LOG_CATEGORY_STATIC(LogPCGExAssistant, Log, All);
 
 void FPCGExAssistantModule::StartupModule()
 {
-	// ToolsetRegistry is experimental and NoRedist; the .uplugin dependency
-	// guarantees the module exists, but the subsystem may still be unavailable
-	// (commandlets, -game, very early loading). Registering with zero valid
-	// tools is also silently refused by the registry, so keep an eye on
-	// LogToolsetRegistry when adding tools.
+	// False only while the ToolsetRegistry module is not loaded; the .uplugin dependency loads it before PostEngineInit.
 	if (!UToolsetRegistry::IsAvailable())
 	{
 		UE_LOG(LogPCGExAssistant, Warning, TEXT("Toolset Registry unavailable; PCGEx toolset not registered."));

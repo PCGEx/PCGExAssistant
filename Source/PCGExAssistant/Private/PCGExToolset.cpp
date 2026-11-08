@@ -17,12 +17,14 @@
 #include "PCGNode.h"
 #include "PCGPin.h"
 #include "PCGSettings.h"
+#include "PropertyAccessCheck.h"
 #include "ScopedTransaction.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
 #include "StructUtils/PropertyBag.h"
 #include "ToolsetRegistry/ToolsetLibrary.h"
 #include "UObject/Package.h"
+#include "UObject/PropertyAccessUtil.h"
 #include "UObject/StructOnScope.h"
 #include "UObject/UnrealType.h"
 #include "UObject/UObjectIterator.h"
@@ -376,7 +378,7 @@ namespace PCGExAssistant
 			{TEXT("tooltip"), TEXT("tooltip")},
 		};
 
-		for (const TPair<FString, TSharedPtr<FJsonValue>>& Pair : SchemaProperties->Values)
+		for (const TPair<FString, TSharedPtr<FJsonValue>> Pair : SchemaProperties->Values)
 		{
 			const TSharedPtr<FJsonObject>* PropertySchema = nullptr;
 			const TSharedPtr<FJsonObject>* Setting = nullptr;
@@ -398,6 +400,74 @@ namespace PCGExAssistant
 	void RaiseError(const FString& Message)
 	{
 		UKismetSystemLibrary::RaiseScriptError(Message);
+	}
+
+	// The property SetObjectProperties gates a top-level key on, resolved as ToolsetRegistryEditor's private
+	// PropertyListing::FindPropertyByName does: the key's first segment by FName, then by wire name ignoring case.
+	const FProperty* FindParamProperty(const UClass* Class, const FString& Key)
+	{
+		// A subscripted key keeps its first segment; a dotted one desugars to it unless a segment is empty.
+		FString Name = Key;
+		if (Key.Contains(TEXT("[")))
+		{
+			int32 End = 0;
+			while (End < Key.Len() && Key[End] != TEXT('.') && Key[End] != TEXT('[')) { ++End; }
+			Name = Key.Left(End);
+		}
+		else if (Key.Contains(TEXT(".")))
+		{
+			TArray<FString> Segments;
+			Key.ParseIntoArray(Segments, TEXT("."), /*InCullEmpty=*/false);
+			if (!Segments.ContainsByPredicate([](const FString& Segment) { return Segment.IsEmpty(); })) { Name = Segments[0]; }
+		}
+		if (Name.IsEmpty()) { return nullptr; }
+
+		if (const FProperty* Property = PropertyAccessUtil::FindPropertyByName(FName(*Name, FNAME_Find), Class)) { return Property; }
+		for (const FProperty* Property : TFieldRange<FProperty>(Class))
+		{
+			if (Name.Equals(FJsonObjectConverter::StandardizeCase(Property->GetAuthoredName()), ESearchCase::IgnoreCase)) { return Property; }
+		}
+		return nullptr;
+	}
+
+	// SetObjectProperties judges every key's edit gate before it writes any, so a toggle and the params it opens need
+	// separate calls: apply passes of the keys open now, then send the rest once so the engine names the closed gate.
+	bool ApplyParams(UPCGSettings* Settings, const FString& JsonParams)
+	{
+		const TSharedPtr<FJsonObject> Params = ParseJsonObject(JsonParams);
+		if (!Params) { return UToolsetLibrary::SetObjectProperties(Settings, JsonParams, EBypassContainerCheck::Yes); }
+
+		struct FParam
+		{
+			FString Key;
+			TSharedPtr<FJsonValue> Value;
+			const FProperty* Property = nullptr;
+		};
+		TArray<FParam> Pending;
+		for (const TPair<FString, TSharedPtr<FJsonValue>> Pair : Params->Values)
+		{
+			Pending.Add({Pair.Key, Pair.Value, FindParamProperty(Settings->GetClass(), Pair.Key)});
+		}
+
+		while (!Pending.IsEmpty())
+		{
+			const TSharedRef<FJsonObject> Pass = MakeShared<FJsonObject>();
+			TArray<FParam> Gated;
+			for (const FParam& Param : Pending)
+			{
+				if (Param.Property && UE::PropertyEditor::CheckCanSetProperty(Settings, Param.Property).IsAllowed()) { Pass->SetField(Param.Key, Param.Value); }
+				else { Gated.Add(Param); }
+			}
+			if (Gated.Num() == Pending.Num()) { break; }
+			if (!UToolsetLibrary::SetObjectProperties(Settings, ToJsonString(Pass), EBypassContainerCheck::Yes)) { return false; }
+			Pending = MoveTemp(Gated);
+		}
+
+		if (Pending.IsEmpty()) { return true; }
+
+		const TSharedRef<FJsonObject> Rest = MakeShared<FJsonObject>();
+		for (const FParam& Param : Pending) { Rest->SetField(Param.Key, Param.Value); }
+		return UToolsetLibrary::SetObjectProperties(Settings, ToJsonString(Rest), EBypassContainerCheck::Yes);
 	}
 
 	// Places one node the way the engine's PCG toolset does, minus the transaction, which the
@@ -431,7 +501,7 @@ namespace PCGExAssistant
 			}
 		}
 
-		if (!JsonParams.IsEmpty() && !UToolsetLibrary::SetObjectProperties(Node->GetSettings(), JsonParams, EBypassContainerCheck::Yes))
+		if (!JsonParams.IsEmpty() && !ApplyParams(Node->GetSettings(), JsonParams))
 		{
 			return Fail(FString::Printf(TEXT("Could not apply params to '%s'. Check names and value shapes against GetNodeSchema('%s')."), *DisplayName(Class), *ClassId(Class)));
 		}
@@ -975,18 +1045,19 @@ FString UPCGExToolset::AddSubnodes(UPCGGraph* Graph, UPCGNode* TargetNode, const
 		{
 			return Abort(FString::Printf(TEXT("Subnode %d: '%s' has no input pin '%s'. Its input pins are: %s."), i, *ToNode->GetName(), *ToLabel.ToString(), *PinLabels(ToNode->GetInputPins())));
 		}
-		if (!ToPin->IsCompatible(FromPin))
-		{
-			return Abort(FString::Printf(TEXT("Subnode %d: output '%s' (%s) is not compatible with input '%s' (%s) on '%s'."), i,
-				*FromPin->Properties.Label.ToString(), *FromPin->Properties.AllowedTypes.ToDisplayText().ToString(),
-				*ToLabel.ToString(), *ToPin->Properties.AllowedTypes.ToDisplayText().ToString(), *ToNode->GetName()));
-		}
+		// TryAddEdge would replace the existing edge of a single-connection input rather than refuse.
 		if (!ToPin->CanConnect(FromPin))
 		{
 			return Abort(FString::Printf(TEXT("Subnode %d: input '%s' on '%s' takes a single connection and is already connected."), i, *ToLabel.ToString(), *ToNode->GetName()));
 		}
 
-		Graph->AddLabeledEdge(Node, FromPin->Properties.Label, ToNode, ToLabel);
+		FText Reason;
+		if (Graph->TryAddEdge(Node, FromPin->Properties.Label, ToNode, ToLabel, Reason) != EPCGGraphConnectionResult::Success)
+		{
+			return Abort(FString::Printf(TEXT("Subnode %d: cannot connect output '%s' (%s) to input '%s' (%s) on '%s': %s"), i,
+				*FromPin->Properties.Label.ToString(), *FromPin->Properties.AllowedTypes.ToDisplayText().ToString(),
+				*ToLabel.ToString(), *ToPin->Properties.AllowedTypes.ToDisplayText().ToString(), *ToNode->GetName(), *Reason.ToString()));
+		}
 
 		const TSharedPtr<FJsonObject> Edge = MakeShared<FJsonObject>();
 		Edge->SetStringField(TEXT("from"), Node->GetName());

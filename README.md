@@ -21,7 +21,7 @@ The plugin registers a PCGEx toolset with Unreal's experimental Toolset Registry
 
 - **Unreal Engine 5.8**.
 - **[PCGExtendedToolkit](https://github.com/Nebukam/PCGExtendedToolkit)**.
-- The engine's experimental **Toolset Registry** plugin, enabled automatically as a dependency, and its **Model Context Protocol** plugin for clients to connect.
+- The engine's experimental **Toolset Registry** plugin, enabled automatically as a dependency (from 5.9, PCG itself enables it in the editor), and its **Model Context Protocol** plugin for clients to connect, which 5.9 enables by default along with Epic's **AI Assistant**.
 
 Editor-only: nothing ships in cooked builds. The plugin is off by default; enable it in **Edit > Plugins**.
 
@@ -46,15 +46,17 @@ The toolkit's `5.8` branch pairs with this plugin; the Assistant itself tracks `
 
 ## Setup
 
-1. Enable the **PCGEx Assistant** and **Model Context Protocol** plugins (both require an editor restart).
-2. In **Editor Preferences > Plugins > Model Context Protocol**: enable **Auto Start Server**. For the most direct experience, disable **Enable Tool Search** so PCGEx tools appear as first-class tools in your client.
-3. Point your MCP client at the editor, either by letting the engine write the client configuration for you, or manually:
+1. Enable the **PCGEx Assistant** plugin (requires an editor restart). **Model Context Protocol** is on by default from 5.9; enable it too if your project turned it off.
+2. In **Editor Preferences > Agentic Workflows > Model Context Protocol**: enable **Auto Start Server**. For the most direct experience, disable **Enable Tool Search** so PCGEx tools appear as first-class tools in your client. With it on (the default), the client sees four meta-tools, `list_toolsets`, `describe_toolsets`, `describe_tools` and `call_tool`, and reaches the PCGEx tools through `call_tool`.
+3. Point your MCP client at the editor, either with the **Generate Client Config** button on that same settings page, or manually:
 
 ```json
 { "mcpServers": { "unreal": { "type": "http", "url": "http://127.0.0.1:8000/mcp" } } }
 ```
 
 For Claude Code, save this as `.mcp.json` at your project root, or run `claude mcp add --transport http unreal http://127.0.0.1:8000/mcp`. With the editor running, ask a PCGEx question and watch it answer from the knowledge base.
+
+Toolset allow and block lists are project settings: **Project Settings > Plugins > Toolset Registry**, saved under `[/Script/ToolsetRegistry.ToolsetRegistrySettings]` in `Config/DefaultGame.ini`. A section 5.8 saved in the `EditorPerProjectUserSettings` config is ignored, and the editor warns about it at startup.
 
 ## Tools
 

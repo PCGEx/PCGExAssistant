@@ -55,7 +55,7 @@ public:
 	 * @param MaxResults Maximum number of matches to return.
 	 * @return JSON array of matches ordered by relevance: { id, name, plugin, kind: "entry"|"concept", classification?, purpose, situation?, url? }.
 	 */
-	UFUNCTION(meta = (AICallable), Category = "PCGEx|Knowledge")
+	UFUNCTION(meta = (AICallable, AIAccessMode = "Read"), Category = "PCGEx|Knowledge")
 	static FString SearchKnowledge(const FString& Query, const int32 MaxResults = 10);
 
 	/**
@@ -65,7 +65,7 @@ public:
 	 * @param NodeId The node's C++ settings class name (e.g. UPCGExBevelPathSettings), as returned by SearchKnowledge or seen in live reflection. Variant classes documented on a shared page resolve through aliases; settings surfaces inherited from a shared base are referenced by id and fetched with further GetNode calls.
 	 * @return JSON object with the complete entry, or an error if the id is unknown. The entry's classification governs placeability: only "node" and "provider" go in a PCG graph.
 	 */
-	UFUNCTION(meta = (AICallable), Category = "PCGEx|Knowledge")
+	UFUNCTION(meta = (AICallable, AIAccessMode = "Read"), Category = "PCGEx|Knowledge")
 	static FString GetNode(const FString& NodeId);
 
 	/**
@@ -75,7 +75,7 @@ public:
 	 * @param ConceptId The concept id as returned by SearchKnowledge for results of kind "concept", e.g. "working-with-pcgex/filters".
 	 * @return JSON object: { id, title, plugin, description?, outline?, url?, body? }. The body is the page prose in markdown when the installed bundle carries it; **Bold Name** in it references a node by display name, and [Title](concept:id) references another concept.
 	 */
-	UFUNCTION(meta = (AICallable), Category = "PCGEx|Knowledge")
+	UFUNCTION(meta = (AICallable, AIAccessMode = "Read"), Category = "PCGEx|Knowledge")
 	static FString GetConcept(const FString& ConceptId);
 
 	// ~ Editor introspection
@@ -86,7 +86,7 @@ public:
 	 * toolset matches the installed plugin versions.
 	 * @return JSON array of { name, friendlyName, version, enabled }.
 	 */
-	UFUNCTION(meta = (AICallable), Category = "PCGEx|Introspection")
+	UFUNCTION(meta = (AICallable, AIAccessMode = "Read"), Category = "PCGEx|Introspection")
 	static FString GetInstalledPCGExPlugins();
 
 	/**
@@ -96,7 +96,7 @@ public:
 	 * @param ModuleFilter Optional module name substring, e.g. "Valency"; empty lists all.
 	 * @return JSON array of { class, displayName, module, hidden? } sorted by display name; hidden marks deprecated-but-compatible palette nodes.
 	 */
-	UFUNCTION(meta = (AICallable), Category = "PCGEx|Introspection")
+	UFUNCTION(meta = (AICallable, AIAccessMode = "Read"), Category = "PCGEx|Introspection")
 	static FString ListRegisteredNodeTypes(const FString& ModuleFilter);
 
 	/**
@@ -110,7 +110,7 @@ public:
 	 * ImportJson accept, marked by a $comment naming the format; their raw reflection is never shown.
 	 * @return JSON object: { class, displayName, module, hidden?, knowledge?: { id, name, url, classification, inherits? }, inputs: [{ label, types, status, multipleConnections, tooltip?, knowledge? }], outputs: [...], properties: JSON Schema of the writable params (each property may carry a knowledge object with semantics, trap, interactsWith, see, enum), advancedProperties: [names] }.
 	 */
-	UFUNCTION(meta = (AICallable), Category = "PCGEx|Introspection")
+	UFUNCTION(meta = (AICallable, AIAccessMode = "Read"), Category = "PCGEx|Introspection")
 	static FString GetNodeSchema(const FString& SettingsClass);
 
 	// ~ Actuation. Generic graph surgery on existing nodes (UpdateNode, ConnectNodePins,
@@ -122,16 +122,20 @@ public:
 	 * Add a node of any settings class to a PCG graph, PCGEx nodes included. The stock PCG
 	 * toolset's AddNode only knows nodes from the PCG package; use this for everything else.
 	 * Read GetNodeSchema first for the exact param names and pin labels. Undoable.
+	 * A param that another enables (its edit condition) is applied after it, so set both here; values outside
+	 * ClampMin/ClampMax/MaxLength are refused. An instanced sub-object param is edited in place; give
+	 * {"refPath": "/Script/Module.ClassName", ...} to switch it to another class.
+	 * Unknown argument names fail the call.
 	 * @param Graph The PCG graph asset to edit.
 	 * @param SettingsClass The C++ settings class name, e.g. UPCGExBevelPathSettings (the knowledge base id).
-	 * @param NodeName Optional unique object name for the node inside the graph; empty lets the engine pick one.
+	 * @param NodeName Optional unique object name for the node inside the graph; omit it to let the engine pick one.
 	 * @param JsonParams Optional JSON object of params to set, only the ones that differ from defaults. Shape per GetNodeSchema.
-	 * @param NodeTitle Optional display title override; empty keeps the node's default title.
+	 * @param NodeTitle Optional display title override; omit it to keep the node's default title.
 	 * @param XPosition Editor X position. Typical node size is 200.
 	 * @param YPosition Editor Y position. Typical node size is 100.
 	 * @return The created node, usable with the PCG toolset's ConnectNodePins, UpdateNode and GetNodeInfo.
 	 */
-	UFUNCTION(meta = (AICallable), Category = "PCGEx|Actuation")
+	UFUNCTION(meta = (AICallable, AIAccessMode = "Write"), Category = "PCGEx|Actuation")
 	static UPCGNode* CreateNode(
 		UPCGGraph* Graph,
 		const FString& SettingsClass,
@@ -146,15 +150,16 @@ public:
 	 * wire them into a target node's input pin in one undoable operation, laid out beside
 	 * the target. Subnodes feed the target pin by default; a subnode can instead feed another
 	 * subnode declared before it, for nested ensembles. Each subnode must expose exactly one
-	 * output pin unless outputPin names which to use. Fails as a whole if any node cannot be
-	 * created or any connection is incompatible; nothing is left behind.
+	 * output pin unless outputPin names which to use. Params follow CreateNode's rules. Fails as a
+	 * whole if any node cannot be created or any connection is refused (pins must connect directly:
+	 * no filter or conversion node is inserted); nothing is left behind.
 	 * @param Graph The PCG graph asset to edit.
 	 * @param TargetNode The existing node receiving the ensemble.
 	 * @param TargetPinLabel The target's input pin label, e.g. "Filters" or "Heuristics"; read it from GetNode or GetNodeSchema.
 	 * @param SubnodesJson JSON array of { class, name?, params?, title?, feeds?, pin?, outputPin? }: class is the settings class name; params a JSON object per GetNodeSchema; feeds the name of an earlier subnode to connect into instead of the target; pin that subnode's input pin label (required when feeds is set); outputPin which output pin to connect from when the subnode has several.
 	 * @return JSON object: { target: { name, path }, nodes: [{ name, class, displayName, path }], edges: [{ from, fromPin, to, toPin }] }.
 	 */
-	UFUNCTION(meta = (AICallable), Category = "PCGEx|Actuation")
+	UFUNCTION(meta = (AICallable, AIAccessMode = "Write"), Category = "PCGEx|Actuation")
 	static FString AddSubnodes(UPCGGraph* Graph, UPCGNode* TargetNode, const FString& TargetPinLabel, const FString& SubnodesJson);
 
 	// ~ Authoring. PCGEx data as JSON through the PCGExMediator formats: a document is
@@ -169,7 +174,7 @@ public:
 	 * has an action's params schema). Call this before DescribeFormat when unsure what exists.
 	 * @return JSON object: { formats: [{ id, version, struct, summary }], bindings: [{ class, members, summary }], actions: [{ id, target, summary }] }.
 	 */
-	UFUNCTION(meta = (AICallable), Category = "PCGEx|Authoring")
+	UFUNCTION(meta = (AICallable, AIAccessMode = "Read"), Category = "PCGEx|Authoring")
 	static FString ListFormats();
 
 	/**
@@ -183,7 +188,7 @@ public:
 	 * @param FormatIdOrClass A format id or an action id from ListFormats (e.g. pcgex.property-schema, pcgex.sketch.build), a bound class name or path (e.g. UPCGExTupleSettings), or a struct path from a collapsed fragment (e.g. /Script/PCG.PCGSoftISMComponentDescriptor).
 	 * @return JSON Schema object, or an error when nothing matches.
 	 */
-	UFUNCTION(meta = (AICallable), Category = "PCGEx|Authoring")
+	UFUNCTION(meta = (AICallable, AIAccessMode = "Read"), Category = "PCGEx|Authoring")
 	static FString DescribeFormat(const FString& FormatIdOrClass);
 
 	/**
@@ -193,7 +198,7 @@ public:
 	 * @param Target Object path of the asset, <graph object path>:<node title or name> for a node, or a target alias written with a leading at sign: focused (what the user is looking at) or selected (the level or Content Browser selection); the PCGEx skill spells them.
 	 * @return The JSON document { format, version, data }, or an error with diagnostics when the target does not resolve or has no binding.
 	 */
-	UFUNCTION(meta = (AICallable), Category = "PCGEx|Authoring")
+	UFUNCTION(meta = (AICallable, AIAccessMode = "Read"), Category = "PCGEx|Authoring")
 	static FString ExportJson(const FString& Target);
 
 	/**
@@ -210,7 +215,7 @@ public:
 	 * @param Json The document, as produced by ExportJson or written to DescribeFormat's schema.
 	 * @return JSON object { ok, diagnostics: [{ severity, path, message }] }; on failure the call also raises an error carrying the diagnostics.
 	 */
-	UFUNCTION(meta = (AICallable), Category = "PCGEx|Authoring")
+	UFUNCTION(meta = (AICallable, AIAccessMode = "Write"), Category = "PCGEx|Authoring")
 	static FString ImportJson(const FString& Target, const FString& Json);
 
 	/**
@@ -223,7 +228,7 @@ public:
 	 * @param AssetName The asset's name, without extension.
 	 * @return JSON object { ok, path, class } with the new asset's object path (the Target for ImportJson); an existing asset, an unknown class or a bad path raises an error.
 	 */
-	UFUNCTION(meta = (AICallable), Category = "PCGEx|Authoring")
+	UFUNCTION(meta = (AICallable, AIAccessMode = "Write"), Category = "PCGEx|Authoring")
 	static FString CreateAsset(const FString& ClassNameOrPath, const FString& PackagePath, const FString& AssetName);
 
 	/**
@@ -232,7 +237,7 @@ public:
 	 * @param Target Object path of the asset.
 	 * @return JSON object { ok, path }; raises an error when the target does not resolve or saving fails.
 	 */
-	UFUNCTION(meta = (AICallable), Category = "PCGEx|Authoring")
+	UFUNCTION(meta = (AICallable, AIAccessMode = "Write"), Category = "PCGEx|Authoring")
 	static FString SaveAsset(const FString& Target);
 
 	/**
@@ -241,7 +246,7 @@ public:
 	 * title before relying on it.
 	 * @return JSON object { ok, title } naming the undone transaction; raises an error when there is nothing to undo.
 	 */
-	UFUNCTION(meta = (AICallable), Category = "PCGEx|Authoring")
+	UFUNCTION(meta = (AICallable, AIAccessMode = "Write"), Category = "PCGEx|Authoring")
 	static FString Undo();
 
 	/**
@@ -252,7 +257,7 @@ public:
 	 * @param Target Object path of the asset, <graph object path>:<node title or name> for a node, or a target alias written with a leading at sign: focused (what the user is looking at) or selected (the level or Content Browser selection); the PCGEx skill spells them.
 	 * @return JSON object { target, class, properties: [{ name, type, declaredBy, overridden, default, choices?: { locked, items: [{ label, value }] }, patched? }], imports }; falls back to the class's object schema when the binding describes no instance; an error when the target does not resolve or has no binding.
 	 */
-	UFUNCTION(meta = (AICallable), Category = "PCGEx|Authoring")
+	UFUNCTION(meta = (AICallable, AIAccessMode = "Read"), Category = "PCGEx|Authoring")
 	static FString DescribeTarget(const FString& Target);
 
 	/**
@@ -267,7 +272,7 @@ public:
 	 * @param ParamsJson JSON object of params per DescribeFormat(<action id>); empty for none.
 	 * @return JSON object { ok, ...action result, diagnostics }, the result shape being the one the action's params schema describes; raises an error when the action, target or params are wrong.
 	 */
-	UFUNCTION(meta = (AICallable), Category = "PCGEx|Authoring")
+	UFUNCTION(meta = (AICallable, AIAccessMode = "Write"), Category = "PCGEx|Authoring")
 	static FString RunAction(const FString& ActionId, const FString& Target, const FString& ParamsJson = FString());
 
 	/**
@@ -278,7 +283,7 @@ public:
 	 * @param Target Object path, <graph object path>:<node title or name>, or a target alias (at sign + focused, at sign + selected).
 	 * @return JSON object { ok, target, opened } saying how it was shown; raises an error when the target does not resolve or cannot be opened.
 	 */
-	UFUNCTION(meta = (AICallable), Category = "PCGEx|Authoring")
+	UFUNCTION(meta = (AICallable, AIAccessMode = "Write"), Category = "PCGEx|Authoring")
 	static FString Open(const FString& Target);
 
 	/**
@@ -290,6 +295,6 @@ public:
 	 * @param Label Actor label to set; "" keeps the generated name.
 	 * @return JSON object { ok, actor, label, class, bound } or a failure object with diagnostics.
 	 */
-	UFUNCTION(meta = (AICallable), Category = "PCGEx|Authoring")
+	UFUNCTION(meta = (AICallable, AIAccessMode = "Write"), Category = "PCGEx|Authoring")
 	static FString SpawnActor(const FString& ClassNameOrPath, const FString& TransformJson = FString(), const FString& Label = FString());
 };
