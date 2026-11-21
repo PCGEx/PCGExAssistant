@@ -3,6 +3,7 @@
 
 #include "PCGExAssistantModule.h"
 
+#include "Modules/ModuleManager.h"
 #include "PCGExToolset.h"
 #include "ToolsetRegistry/UToolsetRegistry.h"
 
